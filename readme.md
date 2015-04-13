@@ -161,11 +161,11 @@ Begin by adding a test that test a few more words:
 
 ```elixir
 # test/morse_test.exs (still in the "morse encode" test block)
-assert Morse.encode("ALPHA") == ".- .-.. .--. .... .-"
-assert Morse.encode("BETA") == "-... . - .-"
-assert Morse.encode("GAMMA") == "--. .- -- -- .-"
-assert Morse.encode("DELTA") == "-.. . .-.. - .-"
-assert Morse.encode("EPSILON") == ". .--. ... .. .-.. --- -."
+assert Morse.encode("SNAKE") == "... -. .- -.- ."
+assert Morse.encode("BIRD") == "-... .. .-. -.."
+assert Morse.encode("ELEPHANT") == ". .-.. . .--. .... .- -. -"
+assert Morse.encode("DOG") == "-.. --- --."
+assert Morse.encode("CAT") == "-.-. .- -"
 ```
 
 Looking at our `do_encode` function it might get a bit tedious to copy and paste in a definition for every letter of the alphabet. So let us implement a function that makes a lookup in a Map of the alphabet instead.
