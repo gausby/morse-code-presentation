@@ -54,7 +54,7 @@ assert Morse.encode("S") == "..."
 assert Morse.encode("O") == "---"
 ```
 
-The implementation is as simple as the empty string case. Here's the entire file so far:
+Solving this is as simple as the case of the empty string. We simply implement special cases for "S" and "O", which will make our implementation look like this:
 
 ```elixir
 # lib/morse.ex
@@ -93,7 +93,7 @@ iex(2)> rest
 iex(3)>
 ```
 
-As shown `<<"f", rest::binary>>` matches the string `foo`, and the resulting variable `rest` will contain *"oo"*. This pattern-matching technique is quite powerful, because we can split strings and store the results in named variables. Let's try to store the first byte in a variable:
+As shown `<<"f", rest::binary>>` matches the string `"foo"`, and the resulting variable `rest` will contain *"oo"*. This pattern-matching technique is quite powerful, because we can split strings and store the results in named variables. Let's try to store the first byte in a variable:
 
 ```iex
 iex(3)> <<first::binary-size(1), rest::binary>> = "foo"
@@ -145,7 +145,7 @@ iex(2)> [1] == [1 | []]
 true
 ```
 
-A list is a recursive data structure and it ends in an empty list.
+In other words; A list is a recursive data structure and it ends in an empty list.
 
 If we care about the order of the elements we will need to reverse the list before using it. This is because we are adding elements to the front of the list, and thus the last element added to the list will show up first. Reversing an accumulator before we use it is a common Elixir pattern, and we do so in the empty string case of the `do_encode` function. We also join the elements together with a whitespace using `Enum.join/2`
 
@@ -154,7 +154,6 @@ The tests should pass. We have a working morse code encoder that can encode the 
 
 The rest of the alphabet
 ------------------------
-
 Being able to encode the "SOS" message is cool, but our morse code encoder pretty much sucks at anything else. We might need to encode the name of our location if we transmit an "SOS", so let us implement the rest of the morse code alphabet.
 
 Begin by adding a test that test a few more words:
@@ -335,6 +334,101 @@ Nothing new is going on here. We added a special case `" "` that basically just 
 
 While this implementation handle letters and even words (that consist of *S* and *O*) it will cause us some problems as we continue our decode implmentaion. We need to know when a letter is complete before decoding it, becuase unlike the encode function, the letters we are encoding varies in length. Morse code *T* is a single dash, and *E* is a single dot, which would conflict with any other code that start with either.
 
-Let it be said, to get the task done quickly we could probably just split the message on spaces using `String.split` and `Enum.map` a function on the list that decode every code, but what is the fun in that? Let us instead scan for the entire word using another accumulator.
+Let it be said, to get the task done quickly we could probably just split the message on spaces using `String.split`, a couple of `Enum.map_join`s, and a function on the list that decode every code.
 
-*(to be continued)*
+```elixir
+defmodule Morse.Decoder do
+  @alphabet %{
+    ".-" => "A", "-..." => "B", "-.-." => "C", "-.." => "D", "." => "E",
+    "..-." => "F", "--." => "G", "...." => "H", ".." => "I", ".---" => "J",
+    "-.-" => "K", ".-.." => "L", "--" => "M", "-." => "N", "---" => "O",
+    ".--." => "P", "--.-" => "Q", ".-." => "R", "..." => "S", "-" => "T",
+    "..-" => "U", "...-" => "V", ".--" => "W", "-..-" => "X", "-.--" => "Y",
+    "--.." => "Z"
+  }
+
+  def decode(message) do
+    message
+    |> String.split("/")
+    |> Enum.map(&String.split(&1, " "))
+    |> Enum.map_join(" ", fn word -> Enum.map_join(word, &(Map.get(@alphabet, &1))) end)
+  end
+end
+```
+
+A neat implementation. Some of it is a bit cryptic at the first glance but it is only a couple of lines of code and it handles Morse code!
+
+How does it perform? Let's write a benchfella script that decode a bunch of words:
+
+```elixir
+# bench/decode_bench.exs
+defmodule DecodeBench do
+  use Benchfella
+
+  setup_all do
+    # encode all the words in the dictionary to morse code for the benchmark
+    words = File.stream!("/usr/share/dict/words")
+    |> Enum.map(&String.upcase/1)
+    |> Enum.map(&Morse.encode/1)
+
+    {:ok, words}
+  end
+
+  bench "decode every morse encoded word in a morse encoded dictionary" do
+    Enum.map(bench_context, &Morse.decode/1)
+  end
+end
+```
+
+Running our benchmarks shows us that decoding (even though it is pretty fast) is slower than the encoding operation. But we could try to improve on our implementation, and using the benchmarks we have created, and the unit tests, we are in a good position to improve stuff.
+
+
+Optimising the morse decoder
+----------------------------
+Let us attempt to make the decoder faster than the encoder.
+
+todo, explain:
+```elixir
+defmodule Morse.Decoder do
+  @alphabet %{
+    ".-" => "A", "-..." => "B", "-.-." => "C", "-.." => "D", "." => "E",
+    "..-." => "F", "--." => "G", "...." => "H", ".." => "I", ".---" => "J",
+    "-.-" => "K", ".-.." => "L", "--" => "M", "-." => "N", "---" => "O",
+    ".--." => "P", "--.-" => "Q", ".-." => "R", "..." => "S", "-" => "T",
+    "..-" => "U", "...-" => "V", ".--" => "W", "-..-" => "X", "-.--" => "Y",
+    "--.." => "Z"
+  }
+
+  def decode(message),
+    do: do_decode(message, [[]])
+
+  defp do_decode(<<>>, acc),
+    do: acc |> Enum.reverse |> Enum.map_join(" ", &(Enum.join(&1, "")))
+
+  defp do_decode(<<" ", rest::binary>>, acc),
+    do: do_decode(rest, [[] | acc])
+
+  for {code, letter} <- @alphabet do
+    defp do_decode(<<unquote(code), rest::binary>>, [word | acc]),
+      do: do_decode(rest, [[unquote(letter) | word] | acc])
+  end
+end
+```
+
+But now our unit test fails telling us that `"TTT"` does not equal `"O"` when the input is `"---"`. This is because our the generated code puts the definition of `T`--a signle dash--before the pattern match for O--three dashes.
+
+We can solve this by sorting the codes by length, ensuring that longer patters comes before shorter.
+
+The code generating part becomes
+```elixir
+Enum.sort_by(@alphabet, fn {code, _} -> byte_size(code) end, &>=/2) |> Enum.each(fn {code, letter} ->
+  defp do_decode(<<unquote(code), rest::binary>>, [word | acc]),
+    do: do_decode(rest, [[unquote(letter) | word] | acc])
+end)
+```
+
+Running our benchmarks again would yield that we are down to ~689,399.00 µs pr operation. Remarkably better than our old score of ~1,964,475.00 µs pr operation. We are also faster at decoding than encoding now, but we know now that we might have speed to gain in our encoder.
+
+But first, let us implement a neat trick that will let us share the morse to text map on both our encoder and decoder.
+
+Elixir implements a special symbol called `@external_resource`. It is really handy because it allows you to registre a resource that will make the Elixir compiler recompile a program if this file changes. If we took this approach we would be able to share the morse code definition in an external file, and be sure that our encoder and decoder used the same alphabet mapping.
