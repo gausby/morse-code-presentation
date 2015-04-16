@@ -402,16 +402,20 @@ defmodule Morse.Decoder do
   def decode(message),
     do: do_decode(message, [[]])
 
-  defp do_decode(<<>>, acc),
-    do: acc |> Enum.reverse |> Enum.map_join(" ", &(Enum.join(&1, "")))
+  defp do_decode(<<>>, acc) do
+    acc |> Enum.reverse |> Enum.map_join(" ", &prepare_word/1)
+  end
+  defp do_decode(<<" ", rest::binary>>, acc), do: do_decode(rest, acc)
+  defp do_decode(<<"/", rest::binary>>, acc), do: do_decode(rest, [[] | acc])
 
-  defp do_decode(<<" ", rest::binary>>, acc),
-    do: do_decode(rest, [[] | acc])
-
-  for {code, letter} <- @alphabet do
+  Enum.sort_by(@alphabet, fn {code, _} -> byte_size(code) end, &>=/2)
+  |> Enum.each(fn {code, letter} ->
     defp do_decode(<<unquote(code), rest::binary>>, [word | acc]),
       do: do_decode(rest, [[unquote(letter) | word] | acc])
-  end
+  end)
+
+  defp prepare_word(word), do: word |> Enum.reverse |> Enum.join("")
+
 end
 ```
 
