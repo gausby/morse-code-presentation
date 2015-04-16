@@ -514,3 +514,8 @@ Nb: You can leave out the sorting step. It is not needed because the reasons dis
 If we run our benchmark test at this point we will get an error. Our encoder does not know what to do when it reach a new line character. No biggie, we know what to do! It turns out though, we need to handle stuff like dashes and other characters. We could continue adding special cases, but let us instead improve our *morse.txt* file by adding the full international morse code alphabet. (Find the full alphabet in the included file in this github project)
 
 Now the morse encoder should be faster than the decoder again.
+
+
+Todo
+----
+I might wanna make a catch all on the encoder and the decoder. Will allow me to skip some explaination ^_^
