@@ -436,3 +436,81 @@ Running our benchmarks again would yield that we are down to ~689,399.00 µs pr 
 But first, let us implement a neat trick that will let us share the morse to text map on both our encoder and decoder.
 
 Elixir implements a special symbol called `@external_resource`. It is really handy because it allows you to registre a resource that will make the Elixir compiler recompile a program if this file changes. If we took this approach we would be able to share the morse code definition in an external file, and be sure that our encoder and decoder used the same alphabet mapping.
+
+Create a file containing our mose code alphabet in the following format:
+
+```
+A => .-
+B => -...
+C => -.-.
+D => -..
+E => .
+F => ..-.
+G => --.
+H => ....
+I => ..
+J => .---
+K => -.-
+L => .-..
+M => --
+N => -.
+O => ---
+P => .--.
+Q => --.-
+R => .-.
+S => ...
+T => -
+U => ..-
+V => ...-
+W => .--
+X => -..-
+Y => -.--
+Z => --..
+```
+
+Remove the @alphabet map and change the code generating block to this:
+
+```elixir
+@external_resource morse_code_alphabet = Path.join(__DIR__, "morse.txt")
+File.stream!(morse_code_alphabet)
+|> Stream.map(fn(<<letter::binary-size(1), " => ", code::binary>>) -> {String.strip(code), letter} end)
+|> Enum.sort_by(fn {code, _} -> byte_size(code) end, &>=/2)
+|> Enum.each(fn {code, letter} ->
+  defp do_decode(<<unquote(code), rest::binary>>, [word | acc]),
+    do: do_decode(rest, [[unquote(letter) | word] | acc])
+end)
+```
+
+Our unit tests should pass again. Let us switch our attention to our encoder.
+
+
+Optimizing the encoder
+----------------------
+Copy and paste the block that loaded and parsed our morse.txt file into the `encoder`. Remove the `@alphabet`-map and put the code that used to fetch values from the alphabet map into the code generating block; change it to look like this:
+
+```elixir
+defmodule Morse.Encoder do
+  def encode(message), do: do_encode(message, [])
+
+  defp do_encode(<<>>, result),
+    do: result |> Enum.reverse |> Enum.join(" ")
+
+  defp do_encode(<<" ", rest::binary>>, acc),
+    do: do_encode(rest, ["/" | acc])
+    
+  @external_resource morse_code_alphabet = Path.join(__DIR__, "morse.txt")
+  File.stream!(morse_code_alphabet)
+  |> Stream.map(fn(<<letter::binary-size(1), " => ", code::binary>>) -> {String.strip(code), letter} end)
+  |> Enum.each(fn {code, letter} ->
+    defp do_encode(<<unquote(letter), rest::binary>>, acc),
+      do: do_encode(rest, [unquote(code) | acc])
+  end)
+
+end
+```
+
+Nb: You can leave out the sorting step. It is not needed because the reasons discussed earlier does not apply here.
+
+If we run our benchmark test at this point we will get an error. Our encoder does not know what to do when it reach a new line character. No biggie, we know what to do! It turns out though, we need to handle stuff like dashes and other characters. We could continue adding special cases, but let us instead improve our *morse.txt* file by adding the full international morse code alphabet. (Find the full alphabet in the included file in this github project)
+
+Now the morse encoder should be faster than the decoder again.
